@@ -668,6 +668,9 @@ class RoutingTransformerLM(nn.Module):
         super().__init__()
         assert (max_seq_len % window_size) == 0, 'max sequence length must be divisible by the window size, to calculate number of kmeans cluster'
         emb_dim = default(emb_dim, dim)
+        self.emb_dim = emb_dim
+        self.num_tokens = num_tokens
+        self.dim = dim
         self.max_seq_len = max_seq_len
 
         self.token_emb = nn.Embedding(num_tokens, emb_dim)
