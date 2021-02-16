@@ -684,7 +684,11 @@ class RoutingTransformerLM(nn.Module):
 
         if emb_dim != dim:
             self.routing_transformer = ProjectInOut(
-                self.routing_transformer, emb_dim, dim)
+                self.routing_transformer,
+                emb_dim,
+                dim,
+                project_out=return_embeddings
+            )
 
         self.norm = nn.LayerNorm(emb_dim)
 
