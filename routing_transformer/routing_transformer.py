@@ -664,7 +664,19 @@ class RoutingTransformer(nn.Module):
 
 
 class RoutingTransformerLM(nn.Module):
-    def __init__(self, num_tokens, dim, depth, max_seq_len, heads=8, dim_head=None, window_size=64, local_attn_window_size=None, local_attn_radius_blocks=1, causal=False, emb_dim=None, weight_tie=False, attn_dropout=0., ff_dropout=0., attn_layer_dropout=0., layer_dropout=0., ff_mult=4, ff_activation=None, ff_glu=False, return_embeddings=False, n_local_attn_heads=0, reversible=False, ff_chunks=1, kmeans_ema_decay=0.999, commitment_factor=1e-4, receives_context=False, context_window_size=None, rel_pos_emb=True, _register_kmeans_update=True, pkm_layers=tuple(), pkm_num_keys=128, moe_layers=tuple(), moe_num_experts=4, moe_loss_coef=1e-2, num_mem_kv=0, shared_qk=None, context_shared_qk=False, use_rezero=False, use_scale_norm=False, tie_embedding=False, use_absolute_pos_emb=False):
+    def __init__(
+            self, num_tokens, dim, depth, max_seq_len, heads=8, dim_head=None,
+            window_size=64, local_attn_window_size=None, local_attn_radius_blocks=1,
+            causal=False, emb_dim=None, weight_tie=False, attn_dropout=0., ff_dropout=0.,
+            attn_layer_dropout=0., layer_dropout=0., ff_mult=4, ff_activation=None,
+            ff_glu=False, return_embeddings=False, n_local_attn_heads=0, reversible=False,
+            ff_chunks=1, kmeans_ema_decay=0.999, commitment_factor=1e-4, receives_context=False,
+            context_window_size=None, rel_pos_emb=True, _register_kmeans_update=True,
+            pkm_layers=tuple(), pkm_num_keys=128, moe_layers=tuple(), moe_num_experts=4,
+            moe_loss_coef=1e-2, num_mem_kv=0, shared_qk=None, context_shared_qk=False,
+            use_rezero=False, use_scale_norm=False, tie_embedding=False,
+            use_absolute_pos_emb=False, return_context=False
+    ):
         super().__init__()
         assert (max_seq_len % window_size) == 0, 'max sequence length must be divisible by the window size, to calculate number of kmeans cluster'
         emb_dim = default(emb_dim, dim)
@@ -686,13 +698,16 @@ class RoutingTransformerLM(nn.Module):
             self.routing_transformer = ProjectInOut(
                 self.routing_transformer,
                 emb_dim,
-                dim
+                dim,
+                project_out=False
             )
 
         self.norm = nn.LayerNorm(dim)
 
         if return_embeddings:
             self.out = nn.Linear(dim, emb_dim)
+        elif return_context:
+            self.out = nn.Identity()
         elif tie_embedding:
             self.out = MatrixMultiply(self.token_emb.weight, transpose=True)
         else:
