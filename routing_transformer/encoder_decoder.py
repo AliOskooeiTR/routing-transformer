@@ -62,7 +62,7 @@ class RoutingTransformerEncDec(nn.Module):
         assert 'dim' not in dec_kwargs and 'dim' not in enc_kwargs, 'you must set the dim for both encoder and decoder'
 
         enc_kwargs['dim'] = dec_kwargs['dim'] = dim
-        enc_kwargs['return_embeddings'] = True
+        enc_kwargs['return_embeddings'] = False
         dec_kwargs['causal'] = True
         dec_kwargs['receives_context'] = True
         enc_kwargs['_register_kmeans_update'] = dec_kwargs['_register_kmeans_update'] = False

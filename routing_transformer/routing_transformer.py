@@ -686,18 +686,17 @@ class RoutingTransformerLM(nn.Module):
             self.routing_transformer = ProjectInOut(
                 self.routing_transformer,
                 emb_dim,
-                dim,
-                project_out=return_embeddings
+                dim
             )
 
-        self.norm = nn.LayerNorm(emb_dim)
+        self.norm = nn.LayerNorm(dim)
 
         if return_embeddings:
-            self.out = nn.Identity()
+            self.out = nn.Linear(dim, emb_dim)
         elif tie_embedding:
             self.out = MatrixMultiply(self.token_emb.weight, transpose=True)
         else:
-            self.out = nn.Linear(emb_dim, num_tokens)
+            self.out = nn.Linear(dim, num_tokens)
 
     def cancel_kmeans_update(self):
         transformer = find_modules(self, RoutingTransformer)[0]
