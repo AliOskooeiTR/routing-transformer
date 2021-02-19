@@ -102,7 +102,11 @@ class RoutingTransformerEncDec(nn.Module):
         max_seq_len = default(max_seq_len, self.dec.max_seq_len)
         enc_kwargs, dec_kwargs, kwargs = extract_and_set_enc_dec_kwargs(kwargs)
         context, _ = self.enc(seq_in, **enc_kwargs)
-        return self.dec.generate(seq_out_start, max_seq_len, context=context, **{**dec_kwargs, **kwargs})
+        return self.dec.generate(
+            seq_out_start,
+            max_seq_len,
+            context=context, **{**dec_kwargs, **kwargs}
+        )
 
     def forward(self, seq_in, seq_out, return_loss=False, randomly_truncate_sequence=False, **kwargs):
         enc_kwargs, dec_kwargs, kwargs = extract_and_set_enc_dec_kwargs(kwargs)
