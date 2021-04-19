@@ -725,5 +725,5 @@ class RoutingTransformerLM(nn.Module):
         x = self.token_emb(x)
         x = x + self.pos_emb(x)
         x, loss = self.routing_transformer(x, **kwargs)
-        # x = self.norm(x)
+        x = self.norm(x)
         return self.out(x), loss
