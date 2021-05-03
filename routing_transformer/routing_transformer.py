@@ -19,16 +19,20 @@ KMEAN_INIT_ITERS = 10
 
 # helper functions
 
+
 def identity(x, *args, **kwargs):
     return x
+
 
 def default(x, d):
     if x is None:
         return d if not isfunction(d) else d()
     return x
 
+
 def cast_tuple(x):
     return x if isinstance(x, tuple) else (x,)
+
 
 def cache_fn(f):
     cache = None
@@ -41,21 +45,27 @@ def cache_fn(f):
         return cache
     return cached_fn
 
+
 def to(t):
     return {'device': t.device, 'dtype': t.dtype}
+
 
 def find_modules(nn_module, type):
     return [module for module in nn_module.modules() if isinstance(module, type)]
 
+
 def is_empty(t):
     return t.nelement() == 0
+
 
 def max_neg_value(tensor):
     return -torch.finfo(tensor.dtype).max
 
+
 def batched_index_select(values, indices):
     last_dim = values.shape[-1]
     return values.gather(2, expand_dim(indices, -1, last_dim))
+
 
 def merge_dims(ind_from, ind_to, tensor):
     shape = list(tensor.shape)
@@ -63,22 +73,26 @@ def merge_dims(ind_from, ind_to, tensor):
     shape[arr_slice] = [reduce(mul, shape[arr_slice])]
     return tensor.reshape(*shape)
 
+
 def expand_dim(t, dim, k):
     t = t.unsqueeze(dim)
     expand_shape = [-1] * len(t.shape)
     expand_shape[dim] = k
     return t.expand(*expand_shape)
 
-def scatter_mean(src, t, index, dim, eps = 1e-5):
+
+def scatter_mean(src, t, index, dim, eps=1e-5):
     numer = src.scatter_add(dim, index, t)
     denom = src.scatter_add(dim, index, torch.ones_like(t))
     return numer / (denom + eps)
+
 
 def split_at_index(dim, index, t):
     pre_slices = (slice(None),) * dim
     l = (*pre_slices, slice(None, index))
     r = (*pre_slices, slice(index, None))
     return t[l], t[r]
+
 
 def reshape_dim(t, dim, split_dims):
     shape = list(t.shape)
@@ -87,26 +101,30 @@ def reshape_dim(t, dim, split_dims):
     shape[dim:dim+1] = split_dims
     return t.reshape(shape)
 
+
 def ema(old, new, decay):
     if old is None:
         return new
     return old * decay + new * (1 - decay)
 
+
 def ema_inplace(moving_avg, new, decay):
     if is_empty(moving_avg):
         moving_avg.data.copy_(new)
         return
-    moving_avg.data.mul_(decay).add_(new, alpha= (1 - decay))
+    moving_avg.data.mul_(decay).add_(new, alpha=(1 - decay))
 
 # helper classes
+
 
 def map_first_tuple_or_el(x, fn):
     if isinstance(x, tuple):
         return (fn(x[0]),) + x[1:]
     return fn(x)
 
+
 class Chunk(nn.Module):
-    def __init__(self, chunks, fn, along_dim = -1):
+    def __init__(self, chunks, fn, along_dim=-1):
         super().__init__()
         self.dim = along_dim
         self.chunks = chunks
@@ -115,17 +133,20 @@ class Chunk(nn.Module):
     def forward(self, x, **kwargs):
         if self.chunks <= 1:
             return self.fn(x, **kwargs)
-        chunks = x.chunk(self.chunks, dim = self.dim)
-        return torch.cat([self.fn(c, **kwargs) for c in chunks], dim = self.dim)
+        chunks = x.chunk(self.chunks, dim=self.dim)
+        return torch.cat([self.fn(c, **kwargs) for c in chunks], dim=self.dim)
+
 
 class PreNorm(nn.ModuleList):
     def __init__(self, norm_class, dim, fn):
         super().__init__()
         self.norm = norm_class(dim)
         self.fn = fn
+
     def forward(self, x, **kwargs):
         x = self.norm(x)
         return self.fn(x, **kwargs)
+
 
 class ReZero(nn.Module):
     def __init__(self, fn):
@@ -136,6 +157,7 @@ class ReZero(nn.Module):
     def forward(self, x, **kwargs):
         x = self.fn(x, **kwargs)
         return map_first_tuple_or_el(x, lambda t: t * self.residual_weight)
+
 
 class ScaleNorm(nn.Module):
     def __init__(self, dim, eps=1e-5):
@@ -149,8 +171,9 @@ class ScaleNorm(nn.Module):
             return t / n * self.g
         return map_first_tuple_or_el(x, norm)
 
+
 class ProjectInOut(nn.Module):
-    def __init__(self, fn, dim_in, dim_out, project_out = True):
+    def __init__(self, fn, dim_in, dim_out, project_out=True):
         super().__init__()
         self.fn = fn
         self.project_in = nn.Linear(dim_in, dim_out)
@@ -164,21 +187,26 @@ class ProjectInOut(nn.Module):
 
 # kmeans related function and class
 
+
 def update_kmeans_on_backwards(module):
     module.kmean_modules = find_modules(module, Kmeans)
+
     def hook(_, grad_in, grad_out):
         for m in module.kmean_modules:
             m.update()
 
     return module.register_backward_hook(hook)
 
+
 def similarity(x, means):
     return torch.einsum('bhld,hcd->bhlc', x, means)
+
 
 def dists_and_buckets(x, means):
     dists = similarity(x, means)
     _, buckets = torch.max(dists, dim=-1)
     return dists, buckets
+
 
 def batched_bincount(index, num_classes, dim=-1):
     shape = list(index.shape)
@@ -187,7 +215,8 @@ def batched_bincount(index, num_classes, dim=-1):
     out.scatter_add_(dim, index, torch.ones_like(index, dtype=index.dtype))
     return out
 
-def kmeans_iter(x, means, buckets = None):
+
+def kmeans_iter(x, means, buckets=None):
     b, h, l, d, dtype, num_clusters = *x.shape, x.dtype, means.shape[1]
 
     if buckets is None:
@@ -204,13 +233,15 @@ def kmeans_iter(x, means, buckets = None):
     means = means.squeeze(0)
     return means
 
+
 def distribution(dists, window_size):
     _, topk_indices = dists.topk(k=window_size, dim=-2)
     indices = topk_indices.transpose(-2, -1)
     return indices.reshape(*indices.size()[:2], -1)
 
+
 class Kmeans(nn.Module):
-    def __init__(self, num_heads, head_dim, num_clusters, ema_decay = 0.999, commitment = 1e-4):
+    def __init__(self, num_heads, head_dim, num_clusters, ema_decay=0.999, commitment=1e-4):
         super().__init__()
         self.commitment = commitment
         self.ema_decay = ema_decay
@@ -246,7 +277,7 @@ class Kmeans(nn.Module):
         self.initted.data.copy_(torch.tensor(True))
 
     @torch.no_grad()
-    def update(self, new_means = None):
+    def update(self, new_means=None):
         new_means = default(new_means, self.new_means)
         assert new_means is not None, 'new kmeans has not been supplied'
         ema_inplace(self.means, new_means, self.ema_decay)
@@ -255,7 +286,7 @@ class Kmeans(nn.Module):
         self.new_means = None
         self.num_new_means = 0
 
-    def forward(self, x, update_means = False):
+    def forward(self, x, update_means=False):
         self.init(x)
 
         b, dtype = x.shape[0], x.dtype
@@ -271,15 +302,17 @@ class Kmeans(nn.Module):
         if update_means:
             with torch.no_grad():
                 means = kmeans_iter(x, means, buckets)
-            self.new_means = ema(self.new_means, means, self.num_new_means / (self.num_new_means + 1))
+            self.new_means = ema(self.new_means, means, self.num_new_means /
+                                 (self.num_new_means + 1))
             self.num_new_means += 1
 
         return dists, loss
 
 # kmeans attention class
 
+
 class KmeansAttention(nn.Module):
-    def __init__(self, num_clusters, window_size, num_heads, head_dim, causal = False, dropout = 0., ema_decay = 0.999, commitment = 1e-4, context_window_size = None, receives_context = False, num_mem_kv = 0, shared_qk = False):
+    def __init__(self, num_clusters, window_size, num_heads, head_dim, causal=False, dropout=0., ema_decay=0.999, commitment=1e-4, context_window_size=None, receives_context=False, num_mem_kv=0, shared_qk=False):
         super().__init__()
         self.num_heads = num_heads
         self.num_clusters = num_clusters
@@ -296,16 +329,18 @@ class KmeansAttention(nn.Module):
 
         self.num_mem_kv = max(num_mem_kv, 1 if causal and not shared_qk else 0)
         self.mem_key = nn.Parameter(torch.randn(num_heads, num_clusters, self.num_mem_kv, head_dim))
-        self.mem_value = nn.Parameter(torch.randn(num_heads, num_clusters, self.num_mem_kv, head_dim))
+        self.mem_value = nn.Parameter(torch.randn(
+            num_heads, num_clusters, self.num_mem_kv, head_dim))
 
-    def forward(self, q, k, v, query_mask = None, key_mask = None, **kwargs):
-        b, h, t, d, kv_t, wsz, c_wsz, nc, device, dtype = *q.shape, k.shape[2], self.window_size, self.context_window_size, self.num_clusters, q.device, q.dtype
+    def forward(self, q, k, v, query_mask=None, key_mask=None, **kwargs):
+        b, h, t, d, kv_t, wsz, c_wsz, nc, device, dtype = * \
+            q.shape, k.shape[2], self.window_size, self.context_window_size, self.num_clusters, q.device, q.dtype
         is_reverse = kwargs.pop('_reverse', False)
 
         out = torch.zeros_like(q, dtype=dtype)
 
         update_kmeans = self.training and not is_reverse
-        
+
         key_mask = default(key_mask, query_mask) if not self.receives_context else key_mask
         kv_wsz = wsz if not self.receives_context else c_wsz
 
@@ -327,7 +362,7 @@ class KmeansAttention(nn.Module):
         k = batched_index_select(k, kv_indices)
         v = batched_index_select(v, kv_indices)
 
-        reshape_with_window = lambda x: x.reshape(b, h, nc, -1, d)
+        def reshape_with_window(x): return x.reshape(b, h, nc, -1, d)
         q, k, v = map(reshape_with_window, (q, k, v))
 
         m_k, m_v = map(lambda x: expand_dim(x, 0, b).to(q), (self.mem_key, self.mem_value))
@@ -354,7 +389,7 @@ class KmeansAttention(nn.Module):
             mask = q_mask[:, :, :, :, None] >= kv_mask[:, :, :, None, :]
             mask = F.pad(mask, (self.num_mem_kv, 0), value=True)
             dots.masked_fill_(~mask, mask_value)
-            del mask            
+            del mask
 
         if self.shared_qk:
             q_mask, kv_mask = map(lambda t: t.reshape(b, h, nc, -1), (indices, kv_indices))
@@ -373,14 +408,17 @@ class KmeansAttention(nn.Module):
 
 # feedforward
 
+
 class GELU_(nn.Module):
     def forward(self, x):
         return 0.5 * x * (1 + torch.tanh(math.sqrt(2 / math.pi) * (x + 0.044715 * torch.pow(x, 3))))
 
+
 GELU = nn.GELU if hasattr(nn, 'GELU') else GELU_
 
+
 class FeedForward(nn.Module):
-    def __init__(self, dim, mult = 4, dropout = 0., activation = None, glu = False):
+    def __init__(self, dim, mult=4, dropout=0., activation=None, glu=False):
         super().__init__()
         activation = default(activation, GELU)
 
@@ -404,13 +442,17 @@ class FeedForward(nn.Module):
 
 # self attention
 
+
 class SelfAttention(nn.Module):
-    def __init__(self,  dim, depth, max_seq_len, heads, local_attn_heads, window_size, dim_head = None, local_attn_window_size = None, causal = False, attn_dropout = 0., dropout = 0., kmeans_ema_decay = 0.999, commitment_factor = 1e-4, receives_context = False, context_window_size = None, rel_pos_emb = True, num_mem_kv = 0, shared_qk = False):
+    def __init__(self,  dim, depth, max_seq_len, heads, local_attn_heads, window_size, dim_head=None, local_attn_window_size=None, causal=False, attn_dropout=0., dropout=0., kmeans_ema_decay=0.999, commitment_factor=1e-4, receives_context=False, context_window_size=None, rel_pos_emb=True, num_mem_kv=0, shared_qk=False):
         super().__init__()
-        assert dim_head or (dim % heads) == 0, 'hidden dimension must be divisible by number of heads'
-        assert (max_seq_len % window_size) == 0, 'maximum sequence length must be divisible by the target window size'
+        assert dim_head or (
+            dim % heads) == 0, 'hidden dimension must be divisible by number of heads'
+        assert (max_seq_len %
+                window_size) == 0, 'maximum sequence length must be divisible by the target window size'
         assert local_attn_heads <= heads, 'number of local attention heads must be less than total heads'
-        assert not (receives_context and local_attn_heads > 0), 'local attention cannot be used for self attention with context'
+        assert not (receives_context and local_attn_heads >
+                    0), 'local attention cannot be used for self attention with context'
         assert not (receives_context and causal), 'contextual attention layer cannot be causal'
 
         local_attn_window_size = default(local_attn_window_size, window_size // 2)
@@ -436,7 +478,8 @@ class SelfAttention(nn.Module):
 
         if self.local_attn_heads > 0:
             rel_pos_emb_config = (dim_head, local_attn_heads) if rel_pos_emb else None
-            self.local_attn = LocalAttention(local_attn_window_size, causal = True, dropout = attn_dropout, rel_pos_emb_config = rel_pos_emb_config)
+            self.local_attn = LocalAttention(
+                local_attn_window_size, causal=True, dropout=attn_dropout, rel_pos_emb_config=rel_pos_emb_config)
             self.local_to_qkv = nn.Linear(dim, 3 * local_dim_heads)
 
         # global
@@ -444,25 +487,28 @@ class SelfAttention(nn.Module):
         global_dim_heads = dim_head * self.global_attn_heads
 
         if self.global_attn_heads > 0:
-            self.global_attn = KmeansAttention(num_clusters, window_size, self.global_attn_heads, dim_head, causal = causal, dropout = attn_dropout, ema_decay = kmeans_ema_decay, commitment = commitment_factor, receives_context = receives_context, num_mem_kv = num_mem_kv, shared_qk = shared_qk)
+            self.global_attn = KmeansAttention(num_clusters, window_size, self.global_attn_heads, dim_head, causal=causal, dropout=attn_dropout,
+                                               ema_decay=kmeans_ema_decay, commitment=commitment_factor, receives_context=receives_context, num_mem_kv=num_mem_kv, shared_qk=shared_qk)
 
-        self.to_q = nn.Linear(dim, global_dim_heads, bias = False)
-        self.to_v = nn.Linear(dim, global_dim_heads, bias = False)
+        self.to_q = nn.Linear(dim, global_dim_heads, bias=False)
+        self.to_v = nn.Linear(dim, global_dim_heads, bias=False)
 
         if not self.shared_qk:
-            self.to_k = nn.Linear(dim, global_dim_heads, bias = False)
+            self.to_k = nn.Linear(dim, global_dim_heads, bias=False)
 
         # out
 
-        self.to_out = nn.Linear(dim_heads, dim, bias = False)
+        self.to_out = nn.Linear(dim_heads, dim, bias=False)
         self.dropout = nn.Dropout(dropout)
 
-    def forward(self, x, context = None, input_mask = None, context_mask = None, **kwargs):
-        assert not (self.receives_context and context is None), 'context must be passed if self attention is set to receive context'
+    def forward(self, x, context=None, input_mask=None, context_mask=None, **kwargs):
+        assert not (
+            self.receives_context and context is None), 'context must be passed if self attention is set to receive context'
         b, t, e, h, dh = *x.shape, self.heads, self.dim_head
-        has_local, has_global = map(lambda x: x > 0, (self.local_attn_heads, self.global_attn_heads))
+        has_local, has_global = map(
+            lambda x: x > 0, (self.local_attn_heads, self.global_attn_heads))
 
-        split_heads = lambda v: reshape_dim(v, -1, (-1, dh)).transpose(1, 2).contiguous()
+        def split_heads(v): return reshape_dim(v, -1, (-1, dh)).transpose(1, 2).contiguous()
 
         if has_local:
             local_qkv = self.local_to_qkv(x).chunk(3, dim=-1)
@@ -484,11 +530,12 @@ class SelfAttention(nn.Module):
         total_loss = torch.tensor(0., requires_grad=True, **to(x))
 
         if has_local:
-            local_out = self.local_attn(lq, lk, lv, input_mask = input_mask)
+            local_out = self.local_attn(lq, lk, lv, input_mask=input_mask)
             out.append(local_out)
 
         if has_global:
-            global_out, loss = self.global_attn(q, k, v, query_mask = input_mask, key_mask = context_mask)
+            global_out, loss = self.global_attn(
+                q, k, v, query_mask=input_mask, key_mask=context_mask)
             total_loss = total_loss + loss
 
             out.append(global_out)
@@ -498,17 +545,21 @@ class SelfAttention(nn.Module):
         out = self.to_out(out)
         return self.dropout(out), total_loss
 
+
 class RoutingTransformer(nn.Module):
-    def __init__(self, dim, depth, max_seq_len, heads = 8, dim_head = None, window_size = 64, local_attn_window_size = None, causal = False, weight_tie = False, attn_dropout = 0., ff_dropout = 0., attn_layer_dropout = 0., layer_dropout = 0., n_local_attn_heads = 0, ff_glu = False, reversible = False, ff_chunks = 1, kmeans_ema_decay = 0.999, commitment_factor = 1e-4, receives_context = False, context_window_size = None, _register_kmeans_update = False, rel_pos_emb = True, pkm_layers = tuple(), pkm_num_keys = 128, moe_layers = tuple(), moe_num_experts = 4, moe_loss_coef = 1e-2, num_mem_kv = 0, shared_qk = None, context_shared_qk = False, use_rezero = False, use_scale_norm = False, ff_activation = None):
+    def __init__(self, dim, depth, max_seq_len, heads=8, dim_head=None, window_size=64, local_attn_window_size=None, causal=False, weight_tie=False, attn_dropout=0., ff_dropout=0., attn_layer_dropout=0., layer_dropout=0., n_local_attn_heads=0, ff_glu=False, reversible=False, ff_chunks=1, kmeans_ema_decay=0.999, commitment_factor=1e-4, receives_context=False, context_window_size=None, _register_kmeans_update=False, rel_pos_emb=True, pkm_layers=tuple(), pkm_num_keys=128, moe_layers=tuple(), moe_num_experts=4, moe_loss_coef=1e-2, num_mem_kv=0, shared_qk=None, context_shared_qk=False, use_rezero=False, use_scale_norm=False, ff_activation=None):
         super().__init__()
-        shared_qk = default(shared_qk, causal) # default to shared qk when causal, due to experimental results
+        # default to shared qk when causal, due to experimental results
+        shared_qk = default(shared_qk, causal)
 
         local_attn_window_size = default(local_attn_window_size, window_size // 2)
         if type(n_local_attn_heads) is not tuple:
             n_local_attn_heads = tuple([n_local_attn_heads] * depth)
 
-        assert len(n_local_attn_heads) == depth, 'local attention heads tuple must have the same length as the depth'
-        assert all([(local_heads <= heads) for local_heads in n_local_attn_heads]), 'number of local attn heads must be less than the maximum number of heads'
+        assert len(
+            n_local_attn_heads) == depth, 'local attention heads tuple must have the same length as the depth'
+        assert all([(local_heads <= heads) for local_heads in n_local_attn_heads]
+                   ), 'number of local attn heads must be less than the maximum number of heads'
 
         layers = nn.ModuleList([])
 
@@ -516,16 +567,24 @@ class RoutingTransformer(nn.Module):
 
         fn_wrapper = partial(ReZero) if use_rezero else partial(PreNorm, norm_type, dim)
 
-        get_attn = lambda local_heads: SelfAttention(dim, depth, max_seq_len, heads, local_heads, window_size, causal = causal, dim_head = dim_head, local_attn_window_size = local_attn_window_size, attn_dropout = attn_dropout, dropout = attn_layer_dropout, kmeans_ema_decay = kmeans_ema_decay, commitment_factor = commitment_factor, rel_pos_emb = rel_pos_emb, num_mem_kv = num_mem_kv, shared_qk = shared_qk)
-        get_ff = lambda: Chunk(ff_chunks, FeedForward(dim, dropout = ff_dropout, glu = ff_glu, activation = ff_activation), along_dim=1)
-        get_context_attn = lambda: SelfAttention(dim, depth, max_seq_len, heads, 0, window_size, dim_head = dim_head, local_attn_window_size = local_attn_window_size, attn_dropout = attn_dropout, dropout = attn_layer_dropout, kmeans_ema_decay = kmeans_ema_decay, commitment_factor = commitment_factor, receives_context = True, context_window_size = context_window_size, num_mem_kv = num_mem_kv, shared_qk = context_shared_qk)
-        get_context_ff = lambda: Chunk(ff_chunks, FeedForward(dim, dropout = ff_dropout, glu = ff_glu, activation = ff_activation), along_dim=1)
-        get_pkm = lambda: PKM(dim, num_keys = pkm_num_keys)
-        get_moe = lambda: MoE(dim, num_experts = moe_num_experts, loss_coef = moe_loss_coef)
+        def get_attn(local_heads): return SelfAttention(dim, depth, max_seq_len, heads, local_heads, window_size, causal=causal, dim_head=dim_head, local_attn_window_size=local_attn_window_size,
+                                                        attn_dropout=attn_dropout, dropout=attn_layer_dropout, kmeans_ema_decay=kmeans_ema_decay, commitment_factor=commitment_factor, rel_pos_emb=rel_pos_emb, num_mem_kv=num_mem_kv, shared_qk=shared_qk)
+        def get_ff(): return Chunk(ff_chunks, FeedForward(
+            dim, dropout=ff_dropout, glu=ff_glu, activation=ff_activation), along_dim=1)
+
+        def get_context_attn(): return SelfAttention(dim, depth, max_seq_len, heads, 0, window_size, dim_head=dim_head, local_attn_window_size=local_attn_window_size, attn_dropout=attn_dropout, dropout=attn_layer_dropout,
+                                                     kmeans_ema_decay=kmeans_ema_decay, commitment_factor=commitment_factor, receives_context=True, context_window_size=context_window_size, num_mem_kv=num_mem_kv, shared_qk=context_shared_qk)
+        def get_context_ff(): return Chunk(ff_chunks, FeedForward(
+            dim, dropout=ff_dropout, glu=ff_glu, activation=ff_activation), along_dim=1)
+
+        def get_pkm(): return PKM(dim, num_keys=pkm_num_keys)
+        def get_moe(): return MoE(dim, num_experts=moe_num_experts, loss_coef=moe_loss_coef)
 
         if weight_tie:
-            assert len(set(n_local_attn_heads)) == 1, 'you can only weight tie if number of local attention heads for all layers is the same'
-            get_attn, get_ff, get_context_attn, get_context_ff, get_pkm, get_moe = map(cache_fn, (get_attn, get_ff, get_context_attn, get_context_ff, get_pkm, get_moe))
+            assert len(set(n_local_attn_heads)
+                       ) == 1, 'you can only weight tie if number of local attention heads for all layers is the same'
+            get_attn, get_ff, get_context_attn, get_context_ff, get_pkm, get_moe = map(
+                cache_fn, (get_attn, get_ff, get_context_attn, get_context_ff, get_pkm, get_moe))
 
         for ind, local_heads in zip(range(depth), n_local_attn_heads):
             layer = ind + 1
@@ -554,9 +613,11 @@ class RoutingTransformer(nn.Module):
         route_attn = ((True, False), *attn_context_layer) * depth
         route_context = ((False, False), *attn_context_layer) * depth
 
-        context_route_map = {'context': route_context, 'context_mask': route_context} if receives_context else {}
+        context_route_map = {'context': route_context,
+                             'context_mask': route_context} if receives_context else {}
         attn_route_map = {'input_mask': route_attn}
-        self.layers = execute_type(layers, args_route = {**attn_route_map, **context_route_map}, layer_dropout = layer_dropout)
+        self.layers = execute_type(
+            layers, args_route={**attn_route_map, **context_route_map}, layer_dropout=layer_dropout)
 
         if _register_kmeans_update:
             update_kmeans_on_backwards(self)
@@ -568,21 +629,47 @@ class RoutingTransformer(nn.Module):
         x, loss = self.layers(x, **kwargs)
         return x, loss
 
+
 class RoutingTransformerLM(nn.Module):
-    def __init__(self, num_tokens, dim, depth, max_seq_len, heads = 8, dim_head = None, window_size = 64, local_attn_window_size = None, causal = False, emb_dim = None, weight_tie = False, attn_dropout = 0., ff_dropout = 0., attn_layer_dropout = 0., layer_dropout = 0., ff_mult = 4, ff_activation = None, ff_glu = False, return_embeddings = False, n_local_attn_heads = 0, reversible = False, ff_chunks = 1, kmeans_ema_decay = 0.999, commitment_factor = 1e-4, receives_context = False, context_window_size = None, rel_pos_emb = True, _register_kmeans_update = True, pkm_layers = tuple(), pkm_num_keys = 128, moe_layers = tuple(), moe_num_experts = 4, moe_loss_coef = 1e-2, num_mem_kv = 0, shared_qk = None, context_shared_qk = False, use_rezero = False, use_scale_norm = False):
+    def __init__(self, num_tokens, dim, depth, max_seq_len, heads=8,
+                 dim_head=None, window_size=64, local_attn_window_size=None,
+                 causal=False, emb_dim=None, weight_tie=False, attn_dropout=0.,
+                 ff_dropout=0., attn_layer_dropout=0., layer_dropout=0.,
+                 ff_mult=4, ff_activation=None, ff_glu=False,
+                 return_embeddings=False, return_context=False, n_local_attn_heads=0,
+                 reversible=False, ff_chunks=1, kmeans_ema_decay=0.999,
+                 commitment_factor=1e-4, receives_context=False,
+                 context_window_size=None, rel_pos_emb=True,
+                 _register_kmeans_update=True, pkm_layers=tuple(),
+                 pkm_num_keys=128, moe_layers=tuple(),
+                 moe_num_experts=4, moe_loss_coef=1e-2, num_mem_kv=0,
+                 shared_qk=None, context_shared_qk=False, use_rezero=False,
+                 use_scale_norm=False):
         super().__init__()
         assert (max_seq_len % window_size) == 0, 'max sequence length must be divisible by the window size, to calculate number of kmeans cluster'
         emb_dim = default(emb_dim, dim)
         self.max_seq_len = max_seq_len
 
         self.token_emb = nn.Embedding(num_tokens, emb_dim)
-        self.axial_pos_emb = AxialPositionalEmbedding(emb_dim, axial_shape=(max_seq_len // window_size, window_size))
-        self.routing_transformer = RoutingTransformer(dim, depth, max_seq_len, heads = heads, dim_head = dim_head, window_size = window_size, local_attn_window_size = local_attn_window_size, causal = causal, weight_tie = weight_tie, ff_dropout = ff_dropout, attn_dropout = attn_dropout, attn_layer_dropout = attn_layer_dropout, layer_dropout = layer_dropout, n_local_attn_heads = n_local_attn_heads, ff_glu = ff_glu, reversible = reversible, ff_chunks = ff_chunks, kmeans_ema_decay = kmeans_ema_decay, receives_context = receives_context, context_window_size = context_window_size, rel_pos_emb = rel_pos_emb, pkm_layers = pkm_layers, pkm_num_keys = pkm_num_keys,  moe_layers = moe_layers, moe_num_experts = moe_num_experts, moe_loss_coef = moe_loss_coef, num_mem_kv = num_mem_kv, shared_qk = shared_qk, context_shared_qk = context_shared_qk, _register_kmeans_update = _register_kmeans_update, use_rezero = use_rezero, use_scale_norm = use_scale_norm, ff_activation = ff_activation)
+        self.axial_pos_emb = AxialPositionalEmbedding(
+            emb_dim, axial_shape=(max_seq_len // window_size, window_size))
+        self.routing_transformer = RoutingTransformer(dim, depth, max_seq_len, heads=heads, dim_head=dim_head, window_size=window_size, local_attn_window_size=local_attn_window_size, causal=causal, weight_tie=weight_tie, ff_dropout=ff_dropout, attn_dropout=attn_dropout, attn_layer_dropout=attn_layer_dropout, layer_dropout=layer_dropout, n_local_attn_heads=n_local_attn_heads, ff_glu=ff_glu, reversible=reversible, ff_chunks=ff_chunks, kmeans_ema_decay=kmeans_ema_decay,
+                                                      receives_context=receives_context, context_window_size=context_window_size, rel_pos_emb=rel_pos_emb, pkm_layers=pkm_layers, pkm_num_keys=pkm_num_keys,  moe_layers=moe_layers, moe_num_experts=moe_num_experts, moe_loss_coef=moe_loss_coef, num_mem_kv=num_mem_kv, shared_qk=shared_qk, context_shared_qk=context_shared_qk, _register_kmeans_update=_register_kmeans_update, use_rezero=use_rezero, use_scale_norm=use_scale_norm, ff_activation=ff_activation)
 
         if emb_dim != dim:
-            self.routing_transformer = ProjectInOut(self.routing_transformer, emb_dim, dim, project_out = not return_embeddings)
+            self.routing_transformer = ProjectInOut(
+                self.routing_transformer,
+                emb_dim,
+                dim,
+                project_out=False
+            )
 
-        self.out = nn.Linear(emb_dim, num_tokens) if not return_embeddings else identity
+        if return_embeddings:
+            self.out = nn.Linear(dim, emb_dim)
+        elif return_context:
+            self.out = nn.Identity()
+        else:
+            self.out = nn.Linear(dim, num_tokens)
 
     def update_kmeans(self):
         for m in find_modules(self, Kmeans):
