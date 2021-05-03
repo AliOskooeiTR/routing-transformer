@@ -96,9 +96,10 @@ class AutoregressiveWrapper(nn.Module):
 
         if num_dims == 1:
             out = out.squeeze(0)
+            logits_lst = logits_lst.squeeze(1)
 
         self.net.train(was_training)
-        return out
+        return out, logits_lst
 
     def forward(self, x, return_loss=False, randomly_truncate_sequence=False, **kwargs):
         pad = partial(pad_sequence, batch_first=True, padding_value=self.pad_value)
