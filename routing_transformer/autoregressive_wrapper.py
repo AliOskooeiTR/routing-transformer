@@ -63,6 +63,7 @@ class AutoregressiveWrapper(nn.Module):
     def generate(self, start_tokens, seq_len, eos_token=None, temperature=1., filter_logits_fn=top_k, filter_thres=0.9, **kwargs):
         was_training = self.net.training
         num_dims = len(start_tokens.shape)
+        logits_lst = list()
 
         if num_dims == 1:
             start_tokens = start_tokens[None, :]
