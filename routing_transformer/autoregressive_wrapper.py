@@ -92,6 +92,7 @@ class AutoregressiveWrapper(nn.Module):
                 break
 
         out = out[:, t:]
+        logits_lst = torch.Tensor(logits_lst)
 
         if num_dims == 1:
             out = out.squeeze(0)
