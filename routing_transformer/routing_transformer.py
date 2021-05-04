@@ -658,26 +658,18 @@ class RoutingTransformerLM(nn.Module):
 
         if emb_dim != dim:
             self.routing_transformer = ProjectInOut(
-                self.routing_transformer, emb_dim, dim,
-                project_out=not return_embeddings
+                self.routing_transformer,
+                emb_dim,
+                dim,
+                project_out=False
             )
 
-        self.out = nn.Linear(emb_dim, num_tokens) if not return_embeddings else identity
-
-        # if emb_dim != dim:
-        #     self.routing_transformer = ProjectInOut(
-        #         self.routing_transformer,
-        #         emb_dim,
-        #         dim,
-        #         project_out=False
-        #     )
-        #
-        # if return_embeddings:
-        #     self.out = nn.Linear(dim, emb_dim)
-        # elif return_context:
-        #     self.out = nn.Identity()
-        # else:
-        #     self.out = nn.Linear(dim, num_tokens)
+        if return_embeddings:
+            self.out = nn.Linear(dim, emb_dim)
+        elif return_context:
+            self.out = nn.Identity()
+        else:
+            self.out = nn.Linear(dim, num_tokens)
 
     def update_kmeans(self):
         for m in find_modules(self, Kmeans):
