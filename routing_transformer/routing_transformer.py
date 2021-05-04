@@ -661,7 +661,7 @@ class RoutingTransformerLM(nn.Module):
                 self.routing_transformer,
                 emb_dim,
                 dim,
-                project_out=False
+                project_out=not return_embeddings
             )
 
         self.out = nn.Linear(emb_dim, num_tokens) if not return_embeddings else identity
