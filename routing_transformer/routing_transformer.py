@@ -664,6 +664,8 @@ class RoutingTransformerLM(nn.Module):
                 project_out=False
             )
 
+        self.norm = nn.LayerNorm(dim)
+
         if return_embeddings:
             self.out = nn.Linear(dim, emb_dim)
         elif return_context:
@@ -679,4 +681,5 @@ class RoutingTransformerLM(nn.Module):
         x = self.token_emb(x)
         x = x + self.axial_pos_emb(x)
         x, loss = self.routing_transformer(x, **kwargs)
+        x = self.norm(x)
         return self.out(x), loss
